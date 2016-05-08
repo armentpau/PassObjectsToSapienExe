@@ -71,7 +71,7 @@ function ConvertTo-CliXml
 		$sw.Dispose()
 	}
 }
-function ConvertTo-Base64Stream
+function ConvertTo-Base64String
 {
 	[CmdletBinding()]
 	param
