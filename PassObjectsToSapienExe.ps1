@@ -44,6 +44,7 @@ function ConvertTo-CliXml
 		[ValidateNotNullOrEmpty()]
 		[PSObject[]]$InputObject
 	)
+	<#
 	begin
 	{
 		$type = [PSObject].Assembly.GetType('System.Management.Automation.Serializer')
@@ -70,6 +71,8 @@ function ConvertTo-CliXml
 		$xw.Close()
 		$sw.Dispose()
 	}
+	#>
+	return [management.automation.psserializer]::Serialize($InputObject)
 }
 function ConvertTo-Base64String
 {
