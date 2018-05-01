@@ -44,37 +44,9 @@ function ConvertTo-CliXml
 		[ValidateNotNullOrEmpty()]
 		[PSObject[]]$InputObject
 	)
-	<#
-	begin
-	{
-		$type = [PSObject].Assembly.GetType('System.Management.Automation.Serializer')
-		$ctor = $type.GetConstructor('instance,nonpublic', $null, @([System.Xml.XmlWriter]), $null)
-		$sw = New-Object System.IO.StringWriter
-		$xw = New-Object System.Xml.XmlTextWriter $sw
-		$serializer = $ctor.Invoke($xw)
-	}
-	process
-	{
-		try
-		{
-			[void]$type.InvokeMember("Serialize", "InvokeMethod,NonPublic,Instance", $null, $serializer, [object[]]@($InputObject))
-		}
-		catch
-		{
-			Write-Warning "Could not serialize $($InputObject.GetType()): $_"
-		}
-	}
-	end
-	{
-		[void]$type.InvokeMember("Done", "InvokeMethod,NonPublic,Instance", $null, $serializer, @())
-		$sw.ToString()
-		$xw.Close()
-		$sw.Dispose()
-	}
-	#>
 	return [management.automation.psserializer]::Serialize($InputObject)
 }
-function ConvertTo-Base64String
+function ConvertTo-CompressedString
 {
 	[CmdletBinding()]
 	param
@@ -85,12 +57,18 @@ function ConvertTo-Base64String
 		[object]$object
 	)
 	
-	$holdingJson = ConvertTo-CliXml -InputObject $object
-	$preConversion_bytes = [System.Text.Encoding]::UTF8.GetBytes($holdingJson)
+	$holdingXml = ConvertTo-CliXml -InputObject $object
+	$preConversion_bytes = [System.Text.Encoding]::UTF8.GetBytes($holdingXml)
 	$preconversion_64 = [System.Convert]::ToBase64String($preConversion_bytes)
-	return $preconversion_64
+	$memoryStream = New-Object System.IO.MemoryStream
+	$compressionStream = New-Object System.IO.Compression.GZipStream($memoryStream, [System.io.compression.compressionmode]::Compress)
+	$streamWriter = New-Object System.IO.streamwriter($compressionStream)
+	$streamWriter.write($preconversion_64)
+	$streamWriter.close()
+	$compressedData = [System.convert]::ToBase64String($memoryStream.ToArray())
+	return $compressedData
 }
-function ConvertFrom-Base64ToObject
+function ConvertFrom-CompressedString
 {
 	[CmdletBinding()]
 	param
@@ -98,9 +76,15 @@ function ConvertFrom-Base64ToObject
 		[Parameter(Mandatory = $true,
 				   Position = 0)]
 		[ValidateNotNullOrEmpty()]
-		[Alias('string')]
-		[string]$inputString
+		[Alias('string', 'inputString')]
+		[string]$CompressedInput
 	)
 	
-	return ConvertFrom-CliXml ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($inputString)))
+	$data = [System.convert]::FromBase64String($CompressedInput)
+	$memoryStream = New-Object System.Io.MemoryStream
+	$memoryStream.write($data, 0, $data.length)
+	$memoryStream.seek(0, 0) | Out-Null
+	$streamReader = New-Object System.IO.StreamReader(New-Object System.IO.Compression.GZipStream($memoryStream, [System.IO.Compression.CompressionMode]::Decompress))
+	$decompressedData = ConvertFrom-CliXml ([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($($streamReader.readtoend()))))
+	return $decompressedData
 }
